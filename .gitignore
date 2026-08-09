@@ -1,0 +1,7 @@
+*.exe
+*.o
+engine
+bench
+
+# personal notes, not part of the project
+LEARNING.md
