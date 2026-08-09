@@ -1,5 +1,7 @@
 # ⚡ Mini Order Matching Engine
 
+**[🚀 Live Demo](https://yashit2005.github.io/order-engine/)**
+
 A price-time priority limit order book in **C++17**, with a live browser terminal — place orders, watch the book match in real time, then fire a simulated market crash and watch it drain a million orders.
 
 Target was 100k orders/sec. Measured **5.0M orders/sec** steady state and **12.4M orders/sec** under crash flow, single threaded.
@@ -65,6 +67,14 @@ The UI button fires a one-way panic burst: 55% aggressive sellers hitting the bi
 
 The burst is processed in 50k-order chunks between socket polls, so the UI keeps streaming while it runs.
 
+## About the hosted demo
+
+GitHub Pages serves static files, so it cannot run a native binary. The demo in `docs/` is the order book **ported to JavaScript** — same structures, same matching rules, same UI — running entirely client-side.
+
+It is a port, not a benchmark of the C++ code. In-browser it sustains roughly **1M orders/sec** on the crash burst against 12.4M for the C++ engine, which is about the gap you would expect between typed-array JavaScript and native code. The numbers in the section above come from `bench.cpp`; the number the demo prints is measured live in your browser and labelled as such.
+
+To run the actual C++ engine, build it and open `web/` — see below.
+
 ## Project structure
 
 ```
@@ -78,9 +88,12 @@ order-engine/
 ├── bench/
 │   └── bench.cpp        # the numbers above
 ├── web/
-│   ├── index.html       # trading terminal UI
+│   ├── index.html       # trading terminal UI (talks to the C++ server)
 │   ├── app.js
 │   └── style.css
+├── docs/                # the hosted demo — same UI, engine ported to JS
+│   ├── engine.js        # the order book, structure for structure
+│   └── demo.js          # market simulator, the browser's src/main.cpp
 └── Makefile
 ```
 

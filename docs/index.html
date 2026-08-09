@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Order Engine — live demo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="dot on"></span>
+    <h1>MINI ORDER ENGINE</h1>
+    <span class="sym">RELIANCE · NSE</span>
+  </div>
+  <div class="ltp">
+    <span class="label">LTP</span>
+    <span class="val" id="last">—</span>
+    <span class="chg" id="chg">—</span>
+  </div>
+</header>
+
+<div class="banner">
+  Browser port of the C++17 engine — same data structures, running client-side so it works on GitHub Pages.
+  Throughput shown here is JavaScript; the C++ benchmark is in the
+  <a href="https://github.com/Yashit2005/order-engine" target="_blank" rel="noopener">repository</a>.
+</div>
+
+<main>
+  <section class="panel stats">
+    <div class="stat"><span class="k">Orders / sec</span><span class="v" id="rate">0</span></div>
+    <div class="stat"><span class="k">Resting orders</span><span class="v" id="live">0</span></div>
+    <div class="stat"><span class="k">Price levels</span><span class="v" id="levels">0</span></div>
+    <div class="stat"><span class="k">Trades</span><span class="v" id="trades">0</span></div>
+    <div class="stat"><span class="k">Volume</span><span class="v" id="volume">0</span></div>
+  </section>
+
+  <section class="grid">
+    <div class="panel book">
+      <div class="panel-head">
+        <h2>Order book — price/time priority</h2>
+        <div class="spread">spread <b id="spread">—</b></div>
+      </div>
+      <div class="ladder">
+        <div class="side">
+          <div class="cols"><span>Orders</span><span>Qty</span><span class="px">Bid</span></div>
+          <div id="bids"></div>
+        </div>
+        <div class="side">
+          <div class="cols"><span class="px">Ask</span><span>Qty</span><span>Orders</span></div>
+          <div id="asks"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel entry">
+        <div class="panel-head"><h2>Place order</h2></div>
+        <div class="tabs">
+          <button class="tab buy active" data-side="buy">BUY</button>
+          <button class="tab sell" data-side="sell">SELL</button>
+        </div>
+        <label>Type
+          <select id="type">
+            <option value="limit">Limit</option>
+            <option value="market">Market</option>
+            <option value="ioc">Immediate or Cancel</option>
+          </select>
+        </label>
+        <div class="row">
+          <label>Price <input id="price" type="number" step="0.05" value="2500.00"></label>
+          <label>Qty <input id="qty" type="number" step="1" value="100"></label>
+        </div>
+        <button id="submit" class="submit buy">BUY</button>
+        <div class="hint" id="hint">Tick size 0.05 · prices snap to the tick</div>
+      </div>
+
+      <div class="panel stress">
+        <div class="panel-head"><h2>Crash simulation</h2></div>
+        <p>Fires a one-way panic burst — price walks down 10%, book crosses on nearly every order.</p>
+        <label>Burst size
+          <select id="burstN">
+            <option value="100000">100,000 orders</option>
+            <option value="250000" selected>250,000 orders</option>
+            <option value="500000">500,000 orders</option>
+          </select>
+        </label>
+        <button id="crash" class="danger">TRIGGER CRASH</button>
+        <div class="burst" id="burst"></div>
+        <div class="row2">
+          <button id="reset" class="ghost">Reset book</button>
+          <label class="chk"><input type="checkbox" id="flow" checked> background flow</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel tape">
+        <div class="panel-head"><h2>Trade tape</h2></div>
+        <div class="cols3"><span>Price</span><span>Qty</span><span>Side</span></div>
+        <div id="tape"></div>
+      </div>
+      <div class="panel mine">
+        <div class="panel-head"><h2>My orders</h2></div>
+        <div id="mine"><div class="empty">No orders yet</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="engine.js"></script>
+<script src="demo.js"></script>
+</body>
+</html>
