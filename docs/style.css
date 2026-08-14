@@ -150,3 +150,5 @@ button:active { transform: translateY(1px); }
   line-height: 1.5;
 }
 .banner a { color: var(--accent); }
+
+.burst .sub { color: var(--muted); font-size: 10px; }

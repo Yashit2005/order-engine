@@ -22,8 +22,10 @@
 </header>
 
 <div class="banner">
-  Browser port of the C++17 engine — same data structures, running client-side so it works on GitHub Pages.
-  Throughput shown here is JavaScript; the C++ benchmark is in the
+  Browser port of the C++17 engine — same matching rules, running client-side so it works on GitHub Pages.
+  It keeps price levels in a <b>flat array indexed by tick</b>; the C++ engine uses an ordered map so it can
+  quote any price. Different structure, so the two throughput numbers are not a language comparison —
+  the crash burst here runs the identical workload to <code>bench.cpp</code>, and both numbers are in the
   <a href="https://github.com/Yashit2005/order-engine" target="_blank" rel="noopener">repository</a>.
 </div>
 

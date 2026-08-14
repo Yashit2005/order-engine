@@ -6,14 +6,13 @@
 const $  = (id) => document.getElementById(id);
 const nf = new Intl.NumberFormat('en-IN');
 
-const TICK = 5;              // 5 paise, NSE equity tick
-const REF  = 250000;         // Rs. 2500.00
+const REF = 250000;          // Rs. 2500.00
 const DEPTH_LEVELS = 14;
 
 const roundTick = (p) => Math.floor(p / TICK) * TICK;
 const fmt = (p) => (p / 100).toFixed(2);
 
-// xorshift32 — the burst calls this millions of times, so it must be cheap.
+// xorshift32 — called millions of times during a burst, so it must be cheap.
 let rngState = 0x9e3779b9;
 function rnd(n) {
   rngState ^= rngState << 13; rngState >>>= 0;
@@ -34,11 +33,11 @@ let ordersWindow = 0;
 let windowStart = performance.now();
 let rate = 0;
 
-let burstLeft = 0, burstTotal = 0, burstStart = REF, burstNs = 0, burstDone = 0;
-let burstRate = 0, burstOrders = 0;
+let burstLeft = 0, burstTotal = 0, burstStart = REF, burstMs = 0, burstDone = 0;
+let burstRate = 0, burstOrders = 0, bestRate = 0, burstRunning = false;
 
 function reprice() {
-  const bb = book.bestBid(), ba = book.bestAsk();
+  const bb = book.bestBidPrice(), ba = book.bestAskPrice();
   if (bb && ba) mid = roundTick((bb + ba) / 2);
   else if (bb)  mid = bb;
   else if (ba)  mid = ba;
@@ -55,9 +54,9 @@ function seed() {
     book.submit(nextId++, BUY,  LIMIT, mid - i * TICK, 25 + rnd(400));
     book.submit(nextId++, SELL, LIMIT, mid + i * TICK, 25 + rnd(400));
   }
-  book.tape.length = 0;
   book.tradeCount = 0;
   book.volume = 0;
+  book.tapeN = 0;
   reprice();
 }
 
@@ -72,32 +71,51 @@ function ambient(n) {
   reprice();
 }
 
-// One-way panic flow with the reference price dragged down 10% over the burst.
+// One-way panic flow with the reference price dragged down 10% across the burst.
+//
+// This mirrors crash() in bench/bench.cpp exactly — same three-way split, same
+// price walk — so the number this prints can be read against the C++ number in
+// the README. Timed over engine work only, as the C++ benchmark is.
 function burstChunk(n) {
-  const take = Math.min(n, burstLeft);
+  const take = burstLeft < n ? burstLeft : n;
+  const base = burstTotal - burstLeft;
+  let id = nextId;
+
   const t0 = performance.now();
-
   for (let i = 0; i < take; i++) {
-    const done = burstTotal - burstLeft + i;
-    const ref  = roundTick(burstStart * (1 - 0.10 * (done / burstTotal)));
-    const r    = rnd(100);
+    const ref = roundTick(burstStart * (1 - 0.10 * ((base + i) / burstTotal)));
+    const r   = rnd(100);
 
-    if (r < 55)      book.submit(nextId++, SELL, LIMIT,  ref - rnd(20) * TICK,      10 + rnd(500));
-    else if (r < 70) book.submit(nextId++, SELL, MARKET, 0,                          10 + rnd(200));
-    else if (r < 95) book.submit(nextId++, BUY,  LIMIT,  ref - (2 + rnd(60)) * TICK, 10 + rnd(500));
-    else             book.submit(nextId++, BUY,  LIMIT,  ref + rnd(15) * TICK,       10 + rnd(300));
+    if (r < 55)      book.submit(id++, SELL, LIMIT,  ref - rnd(20) * TICK,      10 + rnd(500));
+    else if (r < 70) book.submit(id++, SELL, MARKET, 0,                          10 + rnd(200));
+    else             book.submit(id++, BUY,  LIMIT,  ref - (2 + rnd(60)) * TICK, 10 + rnd(500));
   }
+  const dt = performance.now() - t0;
 
+  nextId = id;
   burstLeft -= take;
-  burstNs   += performance.now() - t0;
+  burstMs   += dt;
   burstDone += take;
-
-  if (burstLeft === 0 && burstDone > 0) {
-    burstRate   = burstDone / (burstNs / 1000);
-    burstOrders = burstDone;
-  }
-  reprice();
   return take;
+}
+
+// Runs the burst on its own timer so chunk size, not the 10 Hz render tick,
+// sets how much work each slice does.
+function burstPump() {
+  if (burstLeft <= 0) { burstRunning = false; return; }
+  ordersWindow += burstChunk(100000);
+  reprice();
+
+  if (burstLeft === 0) {
+    burstRate   = burstDone / (burstMs / 1000);
+    burstOrders = burstDone;
+    if (burstRate > bestRate) bestRate = burstRate;
+    burstRunning = false;
+    render();
+    return;
+  }
+  render();
+  setTimeout(burstPump, 0);
 }
 
 function ladder(el, rows, cls, maxQty) {
@@ -118,7 +136,7 @@ function render() {
   for (const l of bids) if (l[1] > maxQty) maxQty = l[1];
   for (const l of asks) if (l[1] > maxQty) maxQty = l[1];
 
-  const bb = book.bestBid(), ba = book.bestAsk();
+  const bb = book.bestBidPrice(), ba = book.bestAskPrice();
 
   $('rate').textContent   = nf.format(Math.round(rate));
   $('live').textContent   = nf.format(book.liveOrders);
@@ -142,7 +160,7 @@ function render() {
   ladder($('bids'), bids, 'bid', maxQty);
   ladder($('asks'), asks, 'ask', maxQty);
 
-  $('tape').innerHTML = book.tape.map(t =>
+  $('tape').innerHTML = book.tapeSnapshot(25).map(t =>
     `<div class="t ${t.s === BUY ? 'B' : 'S'}"><span class="p">${fmt(t.p)}</span>` +
     `<span>${nf.format(t.q)}</span><span class="s">${t.s === BUY ? 'BUY' : 'SELL'}</span></div>`
   ).join('');
@@ -160,23 +178,19 @@ function render() {
     $('burst').innerHTML = `draining… ${nf.format(burstLeft)} orders left`;
   } else if (burstOrders > 0) {
     $('burst').innerHTML =
-      `<b>${(burstRate / 1e6).toFixed(2)}M</b> orders/sec sustained<br>` +
-      `over ${nf.format(burstOrders)} orders (measured in this browser)`;
+      `<b>${(burstRate / 1e6).toFixed(2)}M</b> orders/sec &nbsp;·&nbsp; ` +
+      `best ${(bestRate / 1e6).toFixed(2)}M<br>` +
+      `<span class="sub">${nf.format(burstOrders)} orders, measured in this browser</span>`;
   }
 }
 
-// Tracks resting quantity of the orders placed from the ticket. The book emits
-// aggregate trades, so quantities are reconciled from the id index.
+// Tracks resting quantity of orders placed from the ticket.
 function syncMine() {
   for (const m of mine) {
     if (!m.live) continue;
-    const slot = book.index.get(m.id);
-    if (slot === undefined) { m.filled += m.qty; m.qty = 0; m.live = false; }
-    else {
-      const left = book.oQty[slot];
-      m.filled += m.qty - left;
-      m.qty = left;
-    }
+    const left = book.qtyOf(m.id);
+    if (left === 0) { m.filled += m.qty; m.qty = 0; m.live = false; }
+    else { m.filled += m.qty - left; m.qty = left; }
   }
 }
 
@@ -187,16 +201,16 @@ function submitUser(sideStr, typeStr, priceRs, qty) {
   const px = roundTick(Math.round(priceRs * 100));
   const id = nextId++;
 
-  const rep = book.submit(id, s, t, px, qty);
+  const status = book.submit(id, s, t, px, qty);
   ordersWindow++;
 
   mine.push({
     id,
     s: s === BUY ? 'BUY' : 'SELL',
     price: t === MARKET ? 0 : px,
-    qty: rep.resting,
-    filled: rep.filled,
-    live: rep.status === 'resting',
+    qty: book.lastResting,
+    filled: book.lastFilled,
+    live: status === S_RESTING,
   });
   if (mine.length > 40) mine.shift();
   reprice();
@@ -205,9 +219,7 @@ function submitUser(sideStr, typeStr, priceRs, qty) {
 
 // ---------------------------------------------------------------- main loop
 setInterval(() => {
-  if (burstLeft > 0) {
-    ordersWindow += burstChunk(40000);
-  } else if (autoFlow) {
+  if (!burstRunning && autoFlow) {
     ambient(40);
     ordersWindow += 40;
   }
@@ -220,7 +232,7 @@ setInterval(() => {
     ordersWindow = 0;
     windowStart = now;
   }
-  render();
+  if (!burstRunning) render();
 }, 100);
 
 // ---------------------------------------------------------------- UI wiring
@@ -261,12 +273,23 @@ $('submit').onclick = () =>
   submitUser(side, $('type').value, parseFloat($('price').value) || 0, parseInt($('qty').value, 10) || 0);
 
 $('crash').onclick = () => {
+  if (burstRunning) return;
+
+  // bench.cpp seeds 2000 levels a side before starting its clock; match that
+  // so the burst runs against a book of the same depth. Untimed, as there.
+  for (let i = 1; i <= 2000; i++) {
+    book.submit(nextId++, BUY,  LIMIT, mid - i * TICK, 200);
+    book.submit(nextId++, SELL, LIMIT, mid + i * TICK, 200);
+  }
+
   burstTotal = parseInt($('burstN').value, 10);
   burstLeft  = burstTotal;
   burstDone  = 0;
-  burstNs    = 0;
+  burstMs    = 0;
   burstStart = mid;
+  burstRunning = true;
   $('burst').textContent = 'firing…';
+  setTimeout(burstPump, 0);
 };
 
 $('reset').onclick = () => { seed(); render(); };

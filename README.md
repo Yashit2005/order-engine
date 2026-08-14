@@ -69,9 +69,15 @@ The burst is processed in 50k-order chunks between socket polls, so the UI keeps
 
 ## About the hosted demo
 
-GitHub Pages serves static files, so it cannot run a native binary. The demo in `docs/` is the order book **ported to JavaScript** — same structures, same matching rules, same UI — running entirely client-side.
+GitHub Pages serves static files, so it cannot run a native binary. The demo in `docs/` is the order book **ported to JavaScript** — same matching rules, same UI — running entirely client-side.
 
-It is a port, not a benchmark of the C++ code. In-browser it sustains roughly **1M orders/sec** on the crash burst against 12.4M for the C++ engine, which is about the gap you would expect between typed-array JavaScript and native code. The numbers in the section above come from `bench.cpp`; the number the demo prints is measured live in your browser and labelled as such.
+The port makes one deliberate change. The C++ engine keeps price levels in a `std::map` so it can quote any price; the browser runs inside a known price band, so the port takes the alternative described under *Design decisions*: **price levels in a flat array indexed by tick**. That removes every tree walk, every sorted-array insert and every hash of a price, and the level lookup becomes pointer arithmetic.
+
+The consequence is that **the two numbers are not a language comparison.** The demo's crash burst runs the identical workload to `crash()` in `bench.cpp` — same three-way order split, same 10% price walk, same pre-seeded depth — but against a different level structure, so on a fast machine the browser can print a number at or above the native one. That is the data structure talking, not JavaScript beating C++.
+
+Read it as: the flat-array variant is substantially faster than the ordered map, at the cost of assuming a bounded price band. The honest way to compare the two languages would be to give both the same structure.
+
+The demo's number is measured live in your browser over engine time only, and labelled as such. Everything under *Measured* above comes from `bench.cpp`.
 
 To run the actual C++ engine, build it and open `web/` — see below.
 
