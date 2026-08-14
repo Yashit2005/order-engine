@@ -1,7 +1,10 @@
 *.exe
 *.o
-engine
-bench
+
+# compiled binaries at the repo root, not the bench/ sources
+/engine
+/bench
+!/bench/
 
 # personal notes, not part of the project
 LEARNING.md
